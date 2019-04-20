@@ -40,6 +40,8 @@ func main() {
                 err = Import()
             } else if command == "info" {
                 err = Info()
+            } else if command == "list" {
+                err = List()
             } else if command == "query" {
                 err = Query()
             }
@@ -313,6 +315,42 @@ func Info() (err error) {
     return
 }
 
+func List() (err error) {
+    if db == nil {
+        args := os.Args
+        if len(args) < 3 {
+            err = errors.New("list: No path specified.")
+            return
+        }
+        var resp *http.Response
+        resp, err = http.Get(server_url + "/list?p=" + url.QueryEscape(args[2]))
+        if err != nil {
+            return
+        }
+        defer resp.Body.Close()
+        var body []byte
+        body, err = ioutil.ReadAll(resp.Body)
+        if err == nil {
+            fmt.Printf("%s", string(body))
+        }
+    } else {
+        args := os.Args
+        if len(args) < 3 {
+            err = errors.New("list: No path specified.")
+            return
+        }
+        var file_ids []int
+        var names []string
+        file_ids, names, err = fv.ListPath(args[2])
+        if err == nil {
+        for i := 0; i < len(file_ids); i++ {
+            fmt.Printf("%10d: %s\n", file_ids[i], names[i])
+        }
+        }
+    }
+    return
+}
+
 func LoadConfig() (err error) {
     args := os.Args
     exe_path, exe_filename := filepath.Split(args[0])
@@ -399,5 +437,5 @@ func Query() (err error) {
 func Usage() {
     args := os.Args
     fmt.Printf("usage: %s <command> [arguments]\n", args[0])
-    fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    import <file> [filename]\n    info <file_id>\n    query <terms>\n\n")
+    fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    import <file> [filename]\n    info <file_id>\n    list <path>\n    query <terms>\n\n")
 }
