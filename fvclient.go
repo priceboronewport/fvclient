@@ -85,12 +85,12 @@ func Check() (err error) {
 }
 
 func Exist() (err error) {
+    args := os.Args
+    if len(args) < 3 {
+        err = errors.New("exist: No filename specified.")
+        return
+    }
     if db == nil {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("exist: No filename specified.")
-            return
-        }
         var resp *http.Response
         resp, err = http.Get(server_url + "/exist?fn=" + url.QueryEscape(args[2]))
         if err != nil {
@@ -103,11 +103,6 @@ func Exist() (err error) {
             fmt.Printf("%s", string(body))
         }
     } else {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("exist: No filename specified.")
-            return
-        }
         var file_ids []int
         file_ids, err = fv.QueryFilename(args[2])
         if err == nil {
@@ -120,17 +115,21 @@ func Exist() (err error) {
 }
 
 func Extract() (err error) {
+    args := os.Args
+    if len(args) < 3 {
+        err = errors.New("export: No file_id specified.")
+        return
+    }
+    file_id, _ := strconv.Atoi(args[2])
+    if file_id == 0 {
+        err = errors.New("extract: Invalid file_id.")
+        return
+    }
+    var filename string
+    if len(args) > 3 {
+        filename = args[3]
+    }
     if db == nil {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("extract: No file_id specified.")
-            return
-        }
-        file_id, _ := strconv.Atoi(args[2])
-        if file_id == 0 {
-            err = errors.New("extract: Invalid file_id.")
-            return
-        }
         if len(args) < 4 {
             err = errors.New("extract: No filename specified.")
             return
@@ -159,20 +158,6 @@ func Extract() (err error) {
             }
         }
     } else {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("export: No file_id specified.")
-            return
-        }
-        file_id, _ := strconv.Atoi(args[2])
-        if file_id == 0 {
-            err = errors.New("extract: Invalid file_id.")
-            return
-        }
-        var filename string
-        if len(args) > 3 {
-            filename = args[3]
-        }
         filename, err = fv.Extract(file_id, filename)
         if err == nil {
             fmt.Printf("%10d: %s\n", file_id, filename)
@@ -208,16 +193,16 @@ func fileUploadRequest(uri string, params map[string]string, param_name string, 
 }
 
 func Import() (err error) {
+    args := os.Args
+    if len(args) < 3 {
+        err = errors.New("import: No file specified.")
+        return
+    }
+    filename := args[2]
+    if len(args) >= 4 {
+        filename = args[3]
+    }
     if db == nil {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("import: No file specified.")
-            return
-        }
-        filename := args[2]
-        if len(args) >= 4 {
-            filename = args[3]
-        }
         var fi os.FileInfo
         fi, err = os.Stat(args[2])
         if err != nil {
@@ -244,15 +229,6 @@ func Import() (err error) {
             fmt.Printf("%s", string(body))
         }
     } else {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("import: No file specified.")
-            return
-        }
-        filename := args[2]
-        if len(args) >= 4 {
-            filename = args[3]
-        }
         var fi os.FileInfo
         fi, err = os.Stat(args[2])
         if err != nil {
@@ -268,17 +244,17 @@ func Import() (err error) {
 }
 
 func Info() (err error) {
+    args := os.Args
+    if len(args) < 3 {
+        err = errors.New("info: No file_id specified.")
+        return
+    }
+    file_id, _ := strconv.Atoi(args[2])
+    if file_id == 0 {
+        err = errors.New("info: Invalid file_id.")
+        return
+    }
     if db == nil {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("info: No file_id specified.")
-            return
-        }
-        file_id, _ := strconv.Atoi(args[2])
-        if file_id == 0 {
-            err = errors.New("info: Invalid file_id.")
-            return
-        }
         var resp *http.Response
         resp, err = http.Get(server_url + "/info?f=" + args[2])
         if err != nil {
@@ -291,16 +267,6 @@ func Info() (err error) {
             fmt.Printf("%s", string(body))
         }
     } else {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("info: No file_id specified.")
-            return
-        }
-        file_id, _ := strconv.Atoi(args[2])
-        if file_id == 0 {
-            err = errors.New("info: Invalid file_id.")
-            return
-        }
         var fi filevault.FileInfo
         fi, err = fv.Info(file_id)
         if err == nil {
@@ -316,12 +282,16 @@ func Info() (err error) {
 }
 
 func List() (err error) {
+    args := os.Args
+    if len(args) < 3 {
+        err = errors.New("list: No path specified.")
+        return
+    }
+    if args[2][len(args[2])-1:] != "/" {
+        err = errors.New("list: Path must end with '/'.")
+        return
+    }
     if db == nil {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("list: No path specified.")
-            return
-        }
         var resp *http.Response
         resp, err = http.Get(server_url + "/list?p=" + url.QueryEscape(args[2]))
         if err != nil {
@@ -334,18 +304,13 @@ func List() (err error) {
             fmt.Printf("%s", string(body))
         }
     } else {
-        args := os.Args
-        if len(args) < 3 {
-            err = errors.New("list: No path specified.")
-            return
-        }
         var file_ids []int
         var names []string
         file_ids, names, err = fv.ListPath(args[2])
         if err == nil {
-        for i := 0; i < len(file_ids); i++ {
-            fmt.Printf("%10d: %s\n", file_ids[i], names[i])
-        }
+            for i := 0; i < len(file_ids); i++ {
+                fmt.Printf("%10d: %s\n", file_ids[i], names[i])
+            }
         }
     }
     return
@@ -364,7 +329,7 @@ func LoadConfig() (err error) {
     if _, err = os.Stat(config_filename); err != nil {
         config_filename = "/etc/fvclient.conf"
         if _, err = os.Stat(config_filename); err != nil {
-          return
+            return
         }
     }
     config := filestore.New(config_filename)
@@ -393,16 +358,16 @@ func LoadConfig() (err error) {
 }
 
 func Query() (err error) {
+    args := os.Args
+    if len(args) < 2 {
+        err = errors.New("query: No query terms specified.")
+        return
+    }
+    var terms string
+    for i := 2; i < len(args); i++ {
+        terms += args[i] + " "
+    }
     if db == nil {
-        args := os.Args
-        if len(args) < 2 {
-            err = errors.New("query: No query terms specified.")
-            return
-        }
-        var terms string
-        for i := 2; i < len(args); i++ {
-            terms += args[i] + " "
-        }
         var resp *http.Response
         resp, err = http.Get(server_url + "/query?t=" + url.QueryEscape(terms))
         if err != nil {
@@ -415,15 +380,6 @@ func Query() (err error) {
             fmt.Printf("%s", string(body))
         }
     } else {
-        args := os.Args
-        if len(args) < 2 {
-            err = errors.New("query: No query terms specified.")
-            return
-        }
-        var terms string
-        for i := 2; i < len(args); i++ {
-            terms += args[i] + " "
-        }
         var file_ids []int
         var filenames []string
         file_ids, filenames, err = fv.Query(terms)
@@ -436,6 +392,7 @@ func Query() (err error) {
 
 func Usage() {
     args := os.Args
+    fmt.Printf("fvclient v1.0\n)
     fmt.Printf("usage: %s <command> [arguments]\n", args[0])
     fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    import <file> [filename]\n    info <file_id>\n    list <path>\n    query <terms>\n\n")
 }
