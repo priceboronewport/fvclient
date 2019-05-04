@@ -271,6 +271,9 @@ func Import() (err error) {
 		file_id, err = fv.Import(args[2], filename, fi.ModTime())
 		if err == nil {
 			fmt.Printf("%10d: %s\n", file_id, filename)
+		} else if err.Error() == "Exists" {
+			fmt.Printf("%10d+ %s\n", file_id, filename)
+			err = nil
 		}
 	}
 	return
@@ -425,7 +428,7 @@ func Query() (err error) {
 
 func Usage() {
 	args := os.Args
-	fmt.Printf("fvclient v1.1\n")
+	fmt.Printf("fvclient v1.2\n")
 	fmt.Printf("usage: %s <command> [arguments]\n", args[0])
 	fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    hash <hash>\n    import <file> [filename]\n    info <file_id>\n    list <path>\n    query <terms>\n\n")
 }
