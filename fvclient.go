@@ -1,27 +1,43 @@
+/*
+ *  fvclient - Filevault command line client.
+ *
+ *  Copyright (c) 2019  Priceboro Newport, Inc.  All Rights Reserved.
+ *
+ */
+
 package main
 
 import (
 	"../cola/filestore"
 	"../cola/filevault"
 	"bytes"
+	"crypto/sha256"
+	"crypto/tls"
 	"database/sql"
 	"errors"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
+
+const version = "2.0"
 
 var config *filestore.FileStore
 var server_url string
+var server_user string
+var server_password string
 var db *sql.DB
 var fv *filevault.FileVault
+var http_client *http.Client
 
 func main() {
 	var err error
@@ -57,10 +73,20 @@ func main() {
 	}
 }
 
+func Auth(id string) string {
+	salt := fmt.Sprintf("%d", rand.Uint32())
+	return server_user + "/" + salt + "/" + SHA256(id+salt+server_password)
+}
+
 func Check() (err error) {
 	if db == nil {
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/check")
+		server_url += "/check?auth=" + Auth("check")
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -94,7 +120,12 @@ func Exist() (err error) {
 	}
 	if db == nil {
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/exist?fn=" + url.QueryEscape(args[2]))
+		server_url += "/exist?auth=" + Auth("exist "+args[2]) + "&fn=" + url.QueryEscape(args[2])
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -137,7 +168,12 @@ func Extract() (err error) {
 			return
 		}
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/extract?f=" + args[2])
+		server_url += "/extract?auth=" + Auth("extract "+args[2]) + "&f=" + args[2]
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -202,7 +238,12 @@ func Hash() (err error) {
 	}
 	if db == nil {
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/hash?h=" + url.QueryEscape(args[2]))
+		server_url += "/hash?auth=" + Auth("hash "+args[2]) + "&h=" + url.QueryEscape(args[2])
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -245,13 +286,17 @@ func Import() (err error) {
 			"fn": filename,
 			"ts": fi.ModTime().Format("2006-01-02 15:04:05")}
 		var request *http.Request
-		request, err = fileUploadRequest(server_url+"/import", params, "file", args[2])
+		request, err = fileUploadRequest(server_url+"/import?auth="+Auth("import "+filename), params, "file", args[2])
 		if err != nil {
 			return
 		}
-		client := &http.Client{}
 		var resp *http.Response
-		resp, err = client.Do(request)
+		if http_client == nil {
+			client := &http.Client{}
+			resp, err = client.Do(request)
+		} else {
+			resp, err = http_client.Do(request)
+		}
 		if err != nil {
 			return
 		}
@@ -281,18 +326,31 @@ func Import() (err error) {
 
 func Info() (err error) {
 	args := os.Args
-	if len(args) < 3 {
-		err = errors.New("info: No file_id specified.")
-		return
-	}
-	file_id, _ := strconv.Atoi(args[2])
-	if file_id == 0 {
-		err = errors.New("info: Invalid file_id.")
-		return
+	file_id := 0
+	if len(args) > 2 {
+		file_id, _ = strconv.Atoi(args[2])
+		if file_id == 0 {
+			err = errors.New("info: Invalid file_id.")
+			return
+		}
 	}
 	if db == nil {
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/info?f=" + args[2])
+		var auth string
+		if len(args) > 2 {
+			auth = Auth("info " + args[2])
+		} else {
+			auth = Auth("info")
+		}
+		server_url += "/info?auth=" + auth
+		if len(args) > 2 {
+			server_url += "&f=" + args[2]
+		}
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -303,15 +361,19 @@ func Info() (err error) {
 			fmt.Printf("%s", string(body))
 		}
 	} else {
-		var fi filevault.FileInfo
-		fi, err = fv.Info(file_id)
-		if err == nil {
-			fmt.Printf("File ID: %d\n", fi.FileID)
-			fmt.Printf("Path: %s\n", fi.Path)
-			fmt.Printf("Name: %s\n", fi.Name)
-			fmt.Printf("Date: %s\n", fi.Timestamp.Format("2006-01-02 15:04:05"))
-			fmt.Printf("Size: %d\n", fi.Size)
-			fmt.Printf("Hash: %s\n", fi.Hash)
+		if file_id != 0 {
+			var fi filevault.FileInfo
+			fi, err = fv.Info(file_id)
+			if err == nil {
+				fmt.Printf("File ID: %d\n", fi.FileID)
+				fmt.Printf("Path: %s\n", fi.Path)
+				fmt.Printf("Name: %s\n", fi.Name)
+				fmt.Printf("Date: %s\n", fi.Timestamp.Format("2006-01-02 15:04:05"))
+				fmt.Printf("Size: %d\n", fi.Size)
+				fmt.Printf("Hash: %s\n", fi.Hash)
+			}
+		} else {
+			fmt.Printf("Filevault Client %s\n", version)
 		}
 	}
 	return
@@ -329,7 +391,12 @@ func List() (err error) {
 	}
 	if db == nil {
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/list?p=" + url.QueryEscape(args[2]))
+		server_url += "/list?auth=" + Auth("list "+args[2]) + "&p=" + url.QueryEscape(args[2])
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -389,6 +456,20 @@ func LoadConfig() (err error) {
 		if db, err = sql.Open(db_type, db_connect); err == nil {
 			fv = filevault.New(db, root_path)
 		}
+	} else {
+		auth := strings.Split(config.Read("server_auth"), "/")
+		if len(auth) < 2 {
+			err = errors.New(config_filename + ": Missing or Invalid server_auth.")
+			return
+		}
+		server_user = auth[0]
+		server_password = auth[1]
+		if config.Read("server_verify_certificate") == "" {
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			http_client = &http.Client{Transport: tr}
+		}
 	}
 	return
 }
@@ -405,7 +486,12 @@ func Query() (err error) {
 	}
 	if db == nil {
 		var resp *http.Response
-		resp, err = http.Get(server_url + "/query?t=" + url.QueryEscape(terms))
+		server_url += "/query?auth=" + Auth("query "+terms) + "&t=" + url.QueryEscape(terms)
+		if http_client == nil {
+			resp, err = http.Get(server_url)
+		} else {
+			resp, err = http_client.Get(server_url)
+		}
 		if err != nil {
 			return
 		}
@@ -426,9 +512,15 @@ func Query() (err error) {
 	return
 }
 
+func SHA256(str string) string {
+	h := sha256.New()
+	h.Write([]byte(str))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 func Usage() {
 	args := os.Args
-	fmt.Printf("fvclient v1.2\n")
+	fmt.Printf("Filevault Client %s\n", version)
 	fmt.Printf("usage: %s <command> [arguments]\n", args[0])
-	fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    hash <hash>\n    import <file> [filename]\n    info <file_id>\n    list <path>\n    query <terms>\n\n")
+	fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    hash <hash>\n    import <file> [filename]\n    info [file_id]\n    list <path>\n    query <terms>\n\n")
 }
