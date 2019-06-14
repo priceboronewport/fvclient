@@ -3,6 +3,10 @@
  *
  *  Copyright (c) 2019  Priceboro Newport, Inc.  All Rights Reserved.
  *
+ *  4/14/2019 - Version 1.0 - Initial Version
+ *  6/13/2019 - Version 2.0 - Added Authentication & https
+ *  6/14/2019 - Version 2.1 - Added --config= command line flag
+ *
  */
 
 package main
@@ -29,7 +33,7 @@ import (
 	"strings"
 )
 
-const version = "2.0"
+const version = "2.1"
 
 var config *filestore.FileStore
 var server_url string
@@ -41,9 +45,9 @@ var http_client *http.Client
 
 func main() {
 	var err error
-	if err = LoadConfig(); err == nil {
+	if err = LoadFlags(); err == nil {
 		err = errors.New("Invalid or missing command.")
-		args := os.Args
+		args := Args()
 		if len(args) > 1 {
 			command := args[1]
 			if command == "check" {
@@ -66,11 +70,23 @@ func main() {
 		}
 	}
 	if err != nil {
-		fmt.Printf("\n ** ERROR: %s\n\n", err.Error())
-		if err.Error() == "Invalid or missing command." {
+		error := err.Error()
+		fmt.Printf("\n ** ERROR: %s\n\n", error)
+		if error == "Invalid or missing command." || (len(error) > 13 && error[0:13] == "Invalid flag ") {
 			Usage()
 		}
 	}
+}
+
+func Args() []string {
+	var result []string
+	args := os.Args
+	for _, v := range args {
+		if v[0:1] != "-" {
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 func Auth(id string) string {
@@ -113,7 +129,7 @@ func Check() (err error) {
 }
 
 func Exist() (err error) {
-	args := os.Args
+	args := Args()
 	if len(args) < 3 {
 		err = errors.New("exist: No filename specified.")
 		return
@@ -148,7 +164,7 @@ func Exist() (err error) {
 }
 
 func Extract() (err error) {
-	args := os.Args
+	args := Args()
 	if len(args) < 3 {
 		err = errors.New("export: No file_id specified.")
 		return
@@ -231,7 +247,7 @@ func fileUploadRequest(uri string, params map[string]string, param_name string, 
 }
 
 func Hash() (err error) {
-	args := os.Args
+	args := Args()
 	if len(args) < 3 {
 		err = errors.New("hash: No hash specified.")
 		return
@@ -267,7 +283,7 @@ func Hash() (err error) {
 }
 
 func Import() (err error) {
-	args := os.Args
+	args := Args()
 	if len(args) < 3 {
 		err = errors.New("import: No file specified.")
 		return
@@ -325,7 +341,7 @@ func Import() (err error) {
 }
 
 func Info() (err error) {
-	args := os.Args
+	args := Args()
 	file_id := 0
 	if len(args) > 2 {
 		file_id, _ = strconv.Atoi(args[2])
@@ -380,7 +396,7 @@ func Info() (err error) {
 }
 
 func List() (err error) {
-	args := os.Args
+	args := Args()
 	if len(args) < 3 {
 		err = errors.New("list: No path specified.")
 		return
@@ -419,22 +435,7 @@ func List() (err error) {
 	return
 }
 
-func LoadConfig() (err error) {
-	args := os.Args
-	exe_path, exe_filename := filepath.Split(args[0])
-	exe_ext := filepath.Ext(exe_filename)
-	var config_filename string
-	if exe_ext != "" {
-		config_filename = exe_path + exe_filename[:len(exe_filename)-len(exe_ext)] + ".conf"
-	} else {
-		config_filename = exe_path + exe_filename + ".conf"
-	}
-	if _, err = os.Stat(config_filename); err != nil {
-		config_filename = "/etc/fvclient.conf"
-		if _, err = os.Stat(config_filename); err != nil {
-			return
-		}
-	}
+func LoadConfig(config_filename string) (err error) {
 	config := filestore.New(config_filename)
 	server_url = config.Read("server_url")
 	if server_url == "" {
@@ -474,8 +475,44 @@ func LoadConfig() (err error) {
 	return
 }
 
-func Query() (err error) {
+func LoadFlags() (err error) {
+	var flags []string
 	args := os.Args
+	for _, v := range args {
+		if v[0:1] == "-" {
+			flags = append(flags, v)
+		}
+	}
+	var config_filename string
+	for _, v := range flags {
+		if (len(v) >= 10) && (v[0:9] == "--config=") {
+			config_filename = v[9:]
+		} else {
+			err = errors.New("Invalid flag " + v)
+			return
+		}
+	}
+	if config_filename == "" {
+		args := Args()
+		exe_path, exe_filename := filepath.Split(args[0])
+		exe_ext := filepath.Ext(exe_filename)
+		if exe_ext != "" {
+			config_filename = exe_path + exe_filename[:len(exe_filename)-len(exe_ext)] + ".conf"
+		} else {
+			config_filename = exe_path + exe_filename + ".conf"
+		}
+		if _, err = os.Stat(config_filename); err != nil {
+			config_filename = "/etc/fvclient.conf"
+			if _, err = os.Stat(config_filename); err != nil {
+				return
+			}
+		}
+	}
+	return LoadConfig(config_filename)
+}
+
+func Query() (err error) {
+	args := Args()
 	if len(args) < 2 {
 		err = errors.New("query: No query terms specified.")
 		return
@@ -519,8 +556,9 @@ func SHA256(str string) string {
 }
 
 func Usage() {
-	args := os.Args
-	fmt.Printf("Filevault Client %s\n", version)
-	fmt.Printf("usage: %s <command> [arguments]\n", args[0])
+	args := Args()
+	fmt.Printf("Filevault Client %s\n\n", version)
+	fmt.Printf("usage: %s [flags] <command> [arguments]\n", args[0])
+	fmt.Printf("\n  flags:\n    --config=file - Override default config.\n")
 	fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    hash <hash>\n    import <file> [filename]\n    info [file_id]\n    list <path>\n    query <terms>\n\n")
 }
