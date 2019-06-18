@@ -6,6 +6,7 @@
  *  4/14/2019 - Version 1.0 - Initial Version
  *  6/13/2019 - Version 2.0 - Added Authentication & https
  *  6/14/2019 - Version 2.1 - Added --config= command line flag
+ *  6/17/2019 - Version 2.2 - Fixed error display from fvserver
  *
  */
 
@@ -33,7 +34,7 @@ import (
 	"strings"
 )
 
-const version = "2.1"
+const version = "2.2"
 
 var config *filestore.FileStore
 var server_url string
@@ -110,7 +111,11 @@ func Check() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		var results []string
@@ -131,7 +136,7 @@ func Check() (err error) {
 func Exist() (err error) {
 	args := Args()
 	if len(args) < 3 {
-		err = errors.New("exist: No filename specified.")
+		err = errors.New("No filename specified.")
 		return
 	}
 	if db == nil {
@@ -149,7 +154,11 @@ func Exist() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		var file_ids []int
@@ -166,12 +175,12 @@ func Exist() (err error) {
 func Extract() (err error) {
 	args := Args()
 	if len(args) < 3 {
-		err = errors.New("export: No file_id specified.")
+		err = errors.New("No file_id specified.")
 		return
 	}
 	file_id, _ := strconv.Atoi(args[2])
 	if file_id == 0 {
-		err = errors.New("extract: Invalid file_id.")
+		err = errors.New("Invalid file_id.")
 		return
 	}
 	var filename string
@@ -180,7 +189,7 @@ func Extract() (err error) {
 	}
 	if db == nil {
 		if len(args) < 4 {
-			err = errors.New("extract: No filename specified.")
+			err = errors.New("No filename specified.")
 			return
 		}
 		var resp *http.Response
@@ -208,7 +217,7 @@ func Extract() (err error) {
 			if string(body) != "" {
 				err = errors.New(string(body))
 			} else {
-				err = errors.New("extract: " + resp.Status)
+				err = errors.New(resp.Status)
 			}
 		}
 	} else {
@@ -249,7 +258,7 @@ func fileUploadRequest(uri string, params map[string]string, param_name string, 
 func Hash() (err error) {
 	args := Args()
 	if len(args) < 3 {
-		err = errors.New("hash: No hash specified.")
+		err = errors.New("No hash specified.")
 		return
 	}
 	if db == nil {
@@ -267,7 +276,11 @@ func Hash() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		var file_ids []int
@@ -285,7 +298,7 @@ func Hash() (err error) {
 func Import() (err error) {
 	args := Args()
 	if len(args) < 3 {
-		err = errors.New("import: No file specified.")
+		err = errors.New("No file specified.")
 		return
 	}
 	filename := args[2]
@@ -320,7 +333,11 @@ func Import() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		var fi os.FileInfo
@@ -346,7 +363,7 @@ func Info() (err error) {
 	if len(args) > 2 {
 		file_id, _ = strconv.Atoi(args[2])
 		if file_id == 0 {
-			err = errors.New("info: Invalid file_id.")
+			err = errors.New("Invalid file_id.")
 			return
 		}
 	}
@@ -374,7 +391,11 @@ func Info() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		if file_id != 0 {
@@ -398,11 +419,11 @@ func Info() (err error) {
 func List() (err error) {
 	args := Args()
 	if len(args) < 3 {
-		err = errors.New("list: No path specified.")
+		err = errors.New("No path specified.")
 		return
 	}
 	if args[2][len(args[2])-1:] != "/" {
-		err = errors.New("list: Path must end with '/'.")
+		err = errors.New("Path must end with '/'.")
 		return
 	}
 	if db == nil {
@@ -420,7 +441,11 @@ func List() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		var file_ids []int
@@ -514,7 +539,7 @@ func LoadFlags() (err error) {
 func Query() (err error) {
 	args := Args()
 	if len(args) < 2 {
-		err = errors.New("query: No query terms specified.")
+		err = errors.New("No query terms specified.")
 		return
 	}
 	var terms string
@@ -536,7 +561,11 @@ func Query() (err error) {
 		var body []byte
 		body, err = ioutil.ReadAll(resp.Body)
 		if err == nil {
-			fmt.Printf("%s", string(body))
+			if resp.StatusCode == 200 {
+				fmt.Printf("%s", string(body))
+			} else {
+				err = errors.New(string(body))
+			}
 		}
 	} else {
 		var file_ids []int
