@@ -7,6 +7,7 @@
  *  6/13/2019 - Version 2.0 - Added Authentication & https
  *  6/14/2019 - Version 2.1 - Added --config= command line flag
  *  6/17/2019 - Version 2.2 - Fixed error display from fvserver
+ *  6/17/2019 - Version 2.3 - Added --auth= command line flag
  *
  */
 
@@ -34,12 +35,13 @@ import (
 	"strings"
 )
 
-const version = "2.2"
+const version = "2.3"
 
 var config *filestore.FileStore
 var server_url string
 var server_user string
 var server_password string
+var server_auth string
 var db *sql.DB
 var fv *filevault.FileVault
 var http_client *http.Client
@@ -483,7 +485,10 @@ func LoadConfig(config_filename string) (err error) {
 			fv = filevault.New(db, root_path)
 		}
 	} else {
-		auth := strings.Split(config.Read("server_auth"), "/")
+		if server_auth == "" {
+			server_auth = config.Read("server_auth")
+		}
+		auth := strings.Split(server_auth, "/")
 		if len(auth) < 2 {
 			err = errors.New(config_filename + ": Missing or Invalid server_auth.")
 			return
@@ -512,6 +517,8 @@ func LoadFlags() (err error) {
 	for _, v := range flags {
 		if (len(v) >= 10) && (v[0:9] == "--config=") {
 			config_filename = v[9:]
+		} else if (len(v) >= 8) && (v[0:7] == "--auth=") {
+			server_auth = v[7:]
 		} else {
 			err = errors.New("Invalid flag " + v)
 			return
@@ -588,6 +595,6 @@ func Usage() {
 	args := Args()
 	fmt.Printf("Filevault Client %s\n\n", version)
 	fmt.Printf("usage: %s [flags] <command> [arguments]\n", args[0])
-	fmt.Printf("\n  flags:\n    --config=file - Override default config.\n")
+	fmt.Printf("\n  flags:\n    --auth=user/password\n    --config=file - Override default config.\n")
 	fmt.Printf("\n  commands:\n    check\n    exist <filename>\n    extract <file_id> <filename>\n    hash <hash>\n    import <file> [filename]\n    info [file_id]\n    list <path>\n    query <terms>\n\n")
 }
